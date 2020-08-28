@@ -2,6 +2,7 @@
 #include "ui_excelbase.h"
 #include <QMessageBox>
 #include <QDir>
+#include <QRegExp>
 #include <QDebug>
 
 ExcelBase::ExcelBase(QWidget *parent) :
@@ -12,9 +13,9 @@ ExcelBase::ExcelBase(QWidget *parent) :
 
     qDebug()<<openExcelFile("C:/Users/Wlka/Desktop/data.xlsx");
     QAxObject *workSheet=getSheet(1);
-//    getSheet(2)->dynamicCall("Select(void)");
-    qDebug()<<setFooter(workSheet,"dfgdhog",ExcelBase::Right);
 
+    qDebug()<<addChart(workSheet,"$H$1:$J$47","","$A$3:$A$47","$B$3:$G$47","$B$1:$G$1",-20,40,10,10,-24,0,1,1,
+                       ExcelBase::xlTickLabelPositionHigh,ExcelBase::xlTickLabelPositionLow,ExcelBase::xlLegendPositionBottom);
 }
 
 ExcelBase::~ExcelBase()
@@ -40,7 +41,7 @@ bool ExcelBase::openExcelFile(QString filePath)
     {
         //连接excel，并打开文件，获取所有的sheet
         excel->setControl("Excel.Application");
-        excel->dynamicCall("SetVisible(bool Visible)","false");
+        excel->dynamicCall("SetVisible(bool Visible)","true");
         excel->setProperty("DisplayAlerts","false");
         workBook=excel->querySubObject("WorkBooks")->querySubObject("Open(QString&)",filePath);
         workSheets=workBook->querySubObject("WorkSheets");
@@ -58,7 +59,8 @@ bool ExcelBase::closeExcelFile()
 {
     if(excel)
     {
-        workBook->dynamicCall("SaveAs(const QString&)",QDir::toNativeSeparators(filePath));
+//        workBook->dynamicCall("SaveAs(const QString&)",QDir::toNativeSeparators(filePath));
+        workBook->dynamicCall("Save()");
         workBook->dynamicCall("Close()");
         workBook->dynamicCall("Quit()");
         delete excel;
@@ -198,33 +200,15 @@ int ExcelBase::getColumnsCount(QAxObject *sheet)
 }
 
 //获取指定单元格内容
-QString ExcelBase::getCell(QAxObject* sheet,int row,int column)
+QVariant ExcelBase::getCell(QAxObject* sheet,int row,int column)
 {
-    QString strCell="";
-    try
-    {
-        strCell=sheet->querySubObject("Cells(int,int)",row,column)->property("Value").toString();
-    }
-    catch (...)
-    {
-        QMessageBox::critical(this,"错误","获取单元格信息失败",QMessageBox::Ok,QMessageBox::Ok);
-    }
-    return strCell;
+    return sheet->querySubObject("Cells(int,int)",row,column)->property("Value");
 }
 
 //获取指定单元格内容
-QString ExcelBase::getCell(QAxObject* sheet, QString &number)
+QVariant ExcelBase::getCell(QAxObject* sheet, QString &number)
 {
-    QString strCell="";
-    try
-    {
-        strCell=sheet->querySubObject("Range(QString)",number)->property("Value").toString();
-    }
-    catch (...)
-    {
-        QMessageBox::critical(this,"错误","获取单元格信息失败",QMessageBox::Ok,QMessageBox::Ok);
-    }
-    return strCell;
+    return sheet->querySubObject("Range(QString)",number)->property("Value");
 }
 
 //设置指定单元格内容
@@ -393,6 +377,92 @@ bool ExcelBase::setWindowsView(QAxObject *excel,int viewMode)
     return true;
 }
 
+//插入Chart
+//TODO 修改成适合多种图形的函数
+bool ExcelBase::addChart(QAxObject *sheet,QString chartArea,QString chartTitle,QString xValueDataSource,QString yValueDataSource,QString legendTitleSource,
+                         double xMinScale,double xMaxScale,double xMajorUnit,double xMinorUnit,
+                         double yMinScale,double yMaxScale,double yMajorUnit,double yMinorUnit,
+                         int xTickLabelPosition,int yTickLabelPosition,int legendPosition)
+{
+    try
+    {
+        sheet->querySubObject("Shapes")->querySubObject("AddChart2(240, xlXYScatterLines)")->dynamicCall("Select(void)");
+        QAxObject *chart=excel->querySubObject("ActiveChart");
+        chart->setProperty("HasTitle","True");
+        chart->querySubObject("ChartTitle")->setProperty("Text",chartTitle);
+        chart->setProperty("HasLegend","True");
+        chart->querySubObject("Legend")->setProperty("Position",legendPosition);
+
+        QStringList xDataRange=xValueDataSource.split(QRegExp("[$:]"));
+        QStringList yDataRange=yValueDataSource.split(QRegExp("[$:]"));
+        QStringList legendTitleRange=legendTitleSource.split(QRegExp("[$:]"));
+
+        QList<QVariant> listValues;
+        for(int i=xDataRange[2].toInt();i<=xDataRange[5].toInt();++i)
+        {
+            listValues.push_back(getCell(sheet,i,letterToNumber(xDataRange[1])));
+        }
+
+        for(int i=letterToNumber(yDataRange[1]),seriesCollectionCnt=1;i<=letterToNumber(yDataRange[4]);++i)
+        {
+            QList<QVariant> listXValues;
+            for(int j=yDataRange[2].toInt();j<=yDataRange[5].toInt();++j)
+            {
+                if(!getCell(sheet,j,i).isValid())
+                    break;
+                listXValues.push_back(getCell(sheet,j,i));
+            }
+            chart->querySubObject("SeriesCollection()")->dynamicCall("NewSeries(void)");
+            QAxObject *seriesCollection=chart->querySubObject("SeriesCollection(int)",seriesCollectionCnt++);
+            seriesCollection->setProperty("Name",getCell(sheet,legendTitleRange[2].toInt(),i));
+            seriesCollection->setProperty("Values",listValues);
+            seriesCollection->setProperty("XValues",listXValues);
+        }
+
+        chart->querySubObject("Axes(xlCategory)")->setProperty("MinimumScale",xMinScale);
+        chart->querySubObject("Axes(xlCategory)")->setProperty("MaximumScale",xMaxScale);
+        chart->querySubObject("Axes(xlCategory)")->setProperty("MajorUnit",xMajorUnit);
+        chart->querySubObject("Axes(xlCategory)")->setProperty("MinorUnit",xMinorUnit);
+        chart->querySubObject("Axes(xlCategory)")->setProperty("TickLabelPosition",xTickLabelPosition);
+
+        chart->querySubObject("Axes(xlValue)")->setProperty("MinimumScale",yMinScale);
+        chart->querySubObject("Axes(xlValue)")->setProperty("MaximumScale",yMaxScale);
+        chart->querySubObject("Axes(xlValue)")->setProperty("MajorUnit",yMajorUnit);
+        chart->querySubObject("Axes(xlValue)")->setProperty("MinorUnit",yMinorUnit);
+        chart->querySubObject("Axes(xlValue)")->setProperty("TickLabelPosition",yTickLabelPosition);
+
+        QAxObject *rangeCells=sheet->querySubObject(QString("Range("+chartArea+")").toLatin1());
+        chart->querySubObject("ChartArea")->setProperty("Top",rangeCells->property("Top"));
+        chart->querySubObject("ChartArea")->setProperty("Left",rangeCells->property("Left"));
+        chart->querySubObject("ChartArea")->setProperty("Width",rangeCells->property("Width"));
+        chart->querySubObject("ChartArea")->setProperty("Height",rangeCells->property("Height"));
+    }
+    catch(...)
+    {
+        return false;
+    }
+    return true;
+}
+
+//清空指定Chart的数据
+bool ExcelBase::clearChart(QAxObject *chart)
+{
+    try
+    {
+        while(chart->querySubObject("SeriesCollection(int)", 1))
+        {
+            chart->querySubObject("SeriesCollection(int)", 1)->dynamicCall("Delete(void)");
+        }
+//        chart->querySubObject("ChartArea")->dynamicCall("Clear(void)");
+    }
+    catch(...)
+    {
+        return false;
+    }
+    return true;
+
+}
+
 //快速读取指定sheet所有的内容
 QVariant ExcelBase::readAll(QAxObject* sheet)
 {
@@ -427,6 +497,16 @@ void ExcelBase::castVariant2ListListVariant(const QVariant &var, QList<QList<QVa
     }
 }
 
+
+int ExcelBase::letterToNumber(QString letter)
+{
+    int res=0;
+    for(auto l:letter)
+    {
+        res=res*26+(l.unicode()-'A'+1);
+    }
+    return res;
+}
 
 
 

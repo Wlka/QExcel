@@ -32,8 +32,8 @@ public:
     QAxObject *getColumns(QAxObject *sheet);
     int getColumnsCount(QAxObject *sheet);
 
-    QString getCell(QAxObject* sheet,int row,int column);
-    QString getCell(QAxObject* sheet,QString &number);
+    QVariant getCell(QAxObject* sheet,int row,int column);
+    QVariant getCell(QAxObject* sheet,QString &number);
     bool setCell(QAxObject* sheet,int row,int column,QString value);
     bool setCell(QAxObject* sheet, QString &number,QString &value);
 
@@ -49,21 +49,39 @@ public:
     bool setHeader(QAxObject *sheet,QString header,int position=ExcelBase::Left);
     bool setFooter(QAxObject *sheet,QString footer,int position=ExcelBase::Left);
 
-    bool setWindowsView(QAxObject*,int);
+    bool setWindowsView(QAxObject* excel,int viewMode);
+
+    bool addChart(QAxObject *sheet,QString chartArea,QString chartTitle,QString xValueDataSource,QString yValueDataSource,QString legendTitleSource,
+                  double xMinScale,double xMaxScale,double xMajorUnit,double xMinorUnit,
+                  double yMinScale,double yMaxScale,double yMajorUnit,double yMinorUnit,
+                  int xTickLabelPosition,int yTickLabelPosition,int legendPosition);
+    bool clearChart(QAxObject*);
 
     QVariant readAll(QAxObject* sheet);
     void castVariant2ListListVariant(const QVariant &var, QList<QList<QVariant>> &res);
 
     enum Mode
     {
-        XlNormalView=1,             //普通视图
-        XlPageBreakPreview=2,       //分页预览
-        XlPageLayoutView=3,         //页面布局
-        CenterHorizontally=4,       //水平居中
-        CenterVertically=5,         //垂直居中
-        Left=6,                     //靠左
-        Center=7,                   //居中
-        Right=8                     //靠右
+        XlNormalView=1,                 //普通视图
+        XlPageBreakPreview=2,           //分页预览
+        XlPageLayoutView=3,             //页面布局
+
+        xlTickLabelPositionHigh=-4127, 	//刻度线靠上或靠右
+        xlTickLabelPositionLow=-4134,   //刻度线靠下或靠左
+        xlTickLabelPositionNextToAxis=4, //刻度线在轴旁
+        xlTickLabelPositionNone=-4142,  //无刻度线
+
+        xlLegendPositionBottom=-4107,   //图例靠下
+        xlLegendPositionCorner=2,       //图例靠右上角
+        xlLegendPositionLeft=-4131,     //图例靠左
+        xlLegendPositionRight=-4152,    //图例靠右
+        xlLegendPositionTop=-4160,      //图例靠上
+
+        CenterHorizontally=7,           //水平居中
+        CenterVertically=8,             //垂直居中
+        Left=9,                         //靠左
+        Center=10,                      //居中
+        Right=11                        //靠右
     };
 
 private:
@@ -76,6 +94,8 @@ private:
     QAxObject *workSheets;
     QString filePath;
     QList<QList<QVariant>> res;
+
+    int letterToNumber(QString letter);
 
 
 };
